@@ -1,4 +1,4 @@
-# Подключение библиотек,
+# Подключение библиотек
 import numpy as np
 import os
 import pywt
@@ -54,38 +54,251 @@ def process_baseline():
         return jsonify({'baseline': baseline.tolist()})
     except Exception as e:
         return jsonify({'error': str(e)}), 400
-# Функция удаления БЛ
-def delet_BaseLime(amplitudes_list):
-    lam = float(entry3.get())
-    p = float(entry4.get())
-    amplitudesBL_list = []
-    for amplitudes in amplitudes_list:
-        baseline = baseline_als(amplitudes, lam, p)
-        cleaned_spectrum = amplitudes - baseline
-        amplitudesBL_list.append(cleaned_spectrum)
-    return amplitudesBL_list
+@app.route('/delete_baseline', methods=['POST'])
+def delete_baseline():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        amplitudes_list = [np.array(amplitude) for amplitude in data['amplitudes_list']]  # Список амплитуд
+        lam = float(data.get('lam', 1000))  # Значение lam
+        p = float(data.get('p', 0.001))    # Значение p
+
+        # Применение функции для удаления базовой линии
+        amplitudesBL_list = []
+        for amplitudes in amplitudes_list:
+            baseline = baseline_als(amplitudes, lam, p)
+            cleaned_spectrum = amplitudes - baseline
+            amplitudesBL_list.append(cleaned_spectrum.tolist())
+
+        # Возвращаем результат в JSON
+        return jsonify({'amplitudesBL_list': amplitudesBL_list})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/average_spectrum', methods=['POST'])
+def average_spectrum():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        averaged = [np.array(spectrum) for spectrum in data['averaged']]  # Список спектров
+
+        # Вычисление средней спектрограммы
+        averaged_result = np.mean(np.array(averaged), axis=0).tolist()
+
+        # Возвращаем результат в JSON
+        return jsonify({'average_spectrum': averaged_result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/select_frequency_range', methods=['POST'])
+def select_frequency_range():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        freq_list = [np.array(freq) for freq in data['freq_list']]  # Список частот
+        ampl_list = [np.array(ampl) for ampl in data['ampl_list']]  # Список амплитуд
+        min_freq = float(data.get('min_freq', 0))  # Минимальная частота (по умолчанию 0)
+        max_freq = float(data.get('max_freq', 10000))  # Максимальная частота (по умолчанию 10000)
+
+        # Обработка данных
+        freq_list2 = []
+        ampl_list2 = []
+        for freq, ampl in zip(freq_list, ampl_list):
+            mask = (freq >= min_freq) & (freq <= max_freq)
+            if np.any(mask):
+                freq_list2.append(freq[mask].tolist())
+                ampl_list2.append(ampl[mask].tolist())
+
+        # Возвращаем результат
+        return jsonify({
+            'filtered_freq_list': freq_list2,
+            'filtered_ampl_list': ampl_list2
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+from scipy.signal import savgol_filter
+
+@app.route('/smooth_signal', methods=['POST'])
+def smooth_signal():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        spectrum_list = [np.array(spectrum) for spectrum in data['spectrum_list']]  # Список спектров
+        window_length = int(data.get('window_length', 25))  # Длина окна (по умолчанию 25)
+        polyorder = int(data.get('polyorder', 2))  # Степень полинома (по умолчанию 2)
+
+        # Проверка на корректность параметров
+        if window_length % 2 == 0 or window_length <= 0:
+            return jsonify({'error': 'window_length должен быть положительным и нечетным'}), 400
+        if polyorder >= window_length:
+            return jsonify({'error': 'polyorder должен быть меньше window_length'}), 400
+
+        # Применение сглаживания
+        smoothed_spectra = []
+        for spectrum in spectrum_list:
+            smoothed_spectrum = savgol_filter(spectrum, window_length, polyorder)
+            smoothed_spectra.append(smoothed_spectrum.tolist())
+
+        # Возвращаем результат
+        return jsonify({'smoothed_spectra': smoothed_spectra})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/normalize_spectrum_snv', methods=['POST'])
+def normalize_spectrum_snv():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        spectrum_list = [np.array(spectrum) for spectrum in data['spectrum_list']]  # Список спектров
+
+        # Применение нормализации
+        normalized_spectrum = []
+        for spectrum in spectrum_list:
+            mean_spectrum = np.mean(spectrum)
+            std_spectrum = np.std(spectrum)
+            normalized = (spectrum - mean_spectrum) / std_spectrum
+            normalized_spectrum.append(normalized.tolist())
+
+        # Возвращаем результат
+        return jsonify({'normalized_spectrum': normalized_spectrum})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/normalize_by_max', methods=['POST'])
+def normalize_by_max():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        spectrum_list = [np.array(spectrum) for spectrum in data['spectrum_list']]  # Список спектров
+
+        # Нормализация каждого спектра относительно его максимального значения
+        normalized_spectrum_list = []
+        for spectrum in spectrum_list:
+            max_value = np.max(spectrum)
+            normalized_spectrum = spectrum / max_value
+            normalized_spectrum_list.append(normalized_spectrum.tolist())
+
+        # Возвращаем результат
+        return jsonify({'normalized_spectrum': normalized_spectrum_list})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+import io
+import base64
+
+@app.route('/plot_graph', methods=['POST'])
+def plot_graph():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        frequencies_list = [np.array(freq) for freq in data['frequencies_list']]  # Частоты
+        amplitudes_list = [np.array(ampl) for ampl in data['amplitudes_list']]    # Амплитуды
+        find_flag = data.get('find_flag', False)                                 # Флаг поиска пиков
+        peak_params = data.get('peak_params', {})                                # Параметры поиска пиков
+        width = float(peak_params.get('width', 1))                               # Ширина пиков
+        prominence = float(peak_params.get('prominence', 1))                     # Значение выделенности
+
+        # Создание графика
+        fig, ax = plt.subplots(figsize=(11.5, 7.9))
+        for i in range(len(amplitudes_list)):
+            ax.plot(frequencies_list[i], amplitudes_list[i], alpha=0.5)
+            # Поиск пиков, если включен флаг
+            if find_flag:
+                peaks, _ = find_peaks(amplitudes_list[i], width=width, prominence=prominence)
+                ax.plot(frequencies_list[i][peaks], amplitudes_list[i][peaks], 'ro')
+                for j in range(len(peaks)):
+                    ax.text(
+                        frequencies_list[i][peaks[j]],
+                        amplitudes_list[i][peaks[j]],
+                        f'({frequencies_list[i][peaks[j]]:.2f},\n{amplitudes_list[i][peaks[j]]:.2f})',
+                        fontsize=8
+                    )
+
+        ax.set_xlabel('Рамановский сдвиг, см^-1')
+        ax.set_ylabel('Интенсивность')
+
+        # Сохранение графика в буфер
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        encoded_image = base64.b64encode(buf.getvalue()).decode('utf-8')
+        buf.close()
+        plt.close(fig)
+
+        # Возвращаем график в формате Base64
+        return jsonify({'plot_image': encoded_image})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/process_and_plot', methods=['POST'])
+def process_and_plot():
+    try:
+        # Получение данных из POST-запроса
+        data = request.json
+        frequencies_list = [np.array(freq) for freq in data['frequencies_list']]  # Частоты
+        amplitudes_list = [np.array(ampl) for ampl in data['amplitudes_list']]    # Амплитуды
+
+        # Флаги обработки
+        selection_flag = data.get('selection_flag', False)
+        savgol_filter_flag = data.get('savgol_filter_flag', False)
+        remove_flag = data.get('remove_flag', False)
+        normalize_snv_flag = data.get('normalize_snv_flag', False)
+        normalize_flag = data.get('normalize_flag', False)
+        average_flag = data.get('average_flag', False)
+
+        # Параметры для каждой операции
+        selection_params = data.get('selection_params', {})
+        savgol_params = data.get('savgol_params', {})
+        baseline_params = data.get('baseline_params', {})
+
+        # Применение операций в зависимости от флагов
+        if selection_flag:
+            frequencies_list, amplitudes_list = select_frequency_range(
+                frequencies_list, amplitudes_list, selection_params)
+
+        if savgol_filter_flag:
+            amplitudes_list = apply_savgol_filter(amplitudes_list, savgol_params)
+
+        if remove_flag:
+            amplitudes_list = delete_baseline(amplitudes_list, baseline_params)
+
+        if normalize_snv_flag:
+            amplitudes_list = normalize_spectrum_snv(amplitudes_list)
+        elif normalize_flag:
+            amplitudes_list = normalize_by_max(amplitudes_list)
+
+        if average_flag:
+            amplitudes_list = average_spectrum(amplitudes_list)
+            frequencies_list = average_spectrum(frequencies_list)
+
+        # Построение графика
+        fig, ax = plt.subplots(figsize=(11.5, 7.9))
+        for i in range(len(amplitudes_list)):
+            ax.plot(frequencies_list[i], amplitudes_list[i], alpha=0.5)
+        ax.set_xlabel('Рамановский сдвиг, см^-1')
+        ax.set_ylabel('Интенсивность')
+
+        # Сохранение графика в буфер
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        encoded_image = base64.b64encode(buf.getvalue()).decode('utf-8')
+        buf.close()
+        plt.close(fig)
+
+        # Возвращаем результат
+        return jsonify({'plot_image': encoded_image})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 
-
-# Функция средней спектрограммы
-def averages_spectrum(averaged):
-    averaged2 = []
-    averaged = np.mean(np.array(averaged), axis=0)
-    averaged2.append(averaged)
-    return averaged2
-
-# Функция выбора полосы частот
-def selection(freq_list, ampl_list):
-    min_freq = entry1.get()
-    max_freq = entry2.get()
-    if min_freq == "min_freq":
-        min_freq = 0
-    else:
-        min_freq = float(entry1.get())
-    if max_freq == "max_freq":
-        max_freq = 10000
-    else:
-        max_freq = float(entry2.get())
+# Вспомогательные функции для обработки
+def select_frequency_range(freq_list, ampl_list, params):
+    min_freq = float(params.get('min_freq', 0))
+    max_freq = float(params.get('max_freq', 10000))
     freq_list2 = []
     ampl_list2 = []
     for freq, ampl in zip(freq_list, ampl_list):
@@ -95,193 +308,89 @@ def selection(freq_list, ampl_list):
             ampl_list2.append(ampl[mask])
     return freq_list2, ampl_list2
 
-# Сглаживание сигнала
-# Сглаживания сигнала методом savgol_filter
-def savgol_def(spectrum_list): 
-    window_length = int(entry5.get())
-    polyorder = int(entry6.get())
-    spectrum_list2 = []
-    for i in range(len(spectrum_list)):
-        spectrum_list3 = savgol_filter(spectrum_list[i], window_length, polyorder)
-        spectrum_list2.append(spectrum_list3)
-    return spectrum_list2
+def apply_savgol_filter(amplitudes_list, params):
+    window_length = int(params.get('window_length', 25))
+    polyorder = int(params.get('polyorder', 2))
+    smoothed_list = []
+    for amplitudes in amplitudes_list:
+        smoothed = savgol_filter(amplitudes, window_length, polyorder)
+        smoothed_list.append(smoothed)
+    return smoothed_list
+
+def delete_baseline(amplitudes_list, params):
+    lam = float(params.get('lam', 1000))
+    p = float(params.get('p', 0.001))
+    return [
+        amplitudes - baseline_als(amplitudes, lam, p) for amplitudes in amplitudes_list
+    ]
 
 
 
+import os
+from flask import request
 
-# Нормализация
-# Нормализация спектра методом SNV
-def normalize_spectrum_snv(spectrum_list):
-    normalized_spectrum = []
-    for i in range(len(spectrum_list)):
-        mean_spectrum = np.mean(spectrum_list[i])
-        std_spectrum = np.std(spectrum_list[i])
-        normalized = (spectrum_list[i] - mean_spectrum) / std_spectrum
-        normalized_spectrum.append(normalized)
-    return normalized_spectrum
+@app.route('/upload_files', methods=['POST'])
+def upload_files():
+    try:
+        # Проверяем, что файлы загружены
+        if 'files' not in request.files:
+            return jsonify({'error': 'Файлы не загружены'}), 400
 
-# Нормализацию значений списка относительно их максимального значения
-def normal(list):
-    list = np.array(list)
-    max = np.max(list)
-    for i in range(len(list)):
-        list[i] /= max
-    return (list)
-def normalized(spectrum_list):
-    amplit_LIST = [0] * len(spectrum_list)
-    for a in range(len(spectrum_list)):
-        amplit_LIST[a] = normal(spectrum_list[a])
-    return amplit_LIST
+        files = request.files.getlist('files')  # Получаем список файлов
+        frequencies_list = []
+        amplitudes_list = []
 
-# Строительтво графика на экране.
-def bilding(frequencies_list, amplitudes_list):
-    global new_flag, frame, root
-    if new_flag:
-        frame.destroy()
-    frame = tk.Frame(root)
-    frame.pack()
-
-    # frame.pack_propagate(False)
-    fig = Figure(figsize=(11.5, 7.9))
-    ax = fig.add_subplot()
-    for i in range(len(amplitudes_list)):
-        ax.plot(frequencies_list[i], amplitudes_list[i], alpha=0.5)
-        #Поиск пиков
-        if find_flag:
-            peaks, _ = find_peaks(amplitudes_list[i], width=float(entry7.get()), prominence=float(entry8.get()))
-            ax.plot(frequencies_list[i][peaks], amplitudes_list[i][peaks], 'ro')
-            for j in range(len(peaks)):
-                ax.text(frequencies_list[i][peaks[j]], amplitudes_list[i][peaks[j]], 
-                        f'({frequencies_list[i][peaks[j]]:.2f},\n {amplitudes_list[i][peaks[j]]:.2f})', fontsize=8)    
-
-
-    ax.set_xlabel('Рамановский сдвиг, см^-1')
-    ax.set_ylabel('Интенсивность')
-    canvas = FigureCanvasTkAgg(fig, master=frame)
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-    canvas.draw()
-
-    toolbar = NavigationToolbar2Tk(canvas, frame)
-    toolbar.update()
-    new_flag = True
-
-# Строительство по нажатию
-def get_input():
-    global remove_flag, average_flag, amplitudes_list, frequencies_list
-    timer = perf_counter()
-    amplit_LIST = amplitudes_list
-    freque_LIST = frequencies_list
-    if selection_flag:  
-        freque_LIST, amplit_LIST = selection(freque_LIST, amplit_LIST)
-    # Сглаживание
-    if savgol_filter_flag:
-        amplit_LIST = savgol_def(amplit_LIST)
-    # Удаление базовой линии
-    if remove_flag:
-        amplit_LIST = delet_BaseLime(amplit_LIST)
-    # Нормализация
-    if normalize_snv_flag:
-        amplit_LIST = normalize_spectrum_snv(amplit_LIST)
-    elif normalize_flag:
-        amplit_LIST = normalized(amplit_LIST)
-    # Средней спектрограммы
-    if average_flag:
-        amplit_LIST = averages_spectrum(amplit_LIST)
-        freque_LIST = averages_spectrum(freque_LIST)
-    # Строительство 
-    bilding(freque_LIST, amplit_LIST)
-    
-    print(perf_counter() - timer)
-
-
-
-
-# открытие файла
-def open_folder():
-    global frequencies_list, amplitudes_list
-    frequencies_list = []
-    amplitudes_list = []
-    root = tk.Tk()
-    root.withdraw()
-    folderpath = filedialog.askopenfilenames(title="Выберите файлы", filetypes=(
-    ("ESP files", "*.esp"), ("Text files", "*.txt"), ("All files", "*.*")))
-    if folderpath:
-        time = perf_counter()
-        for path in folderpath:
-            data = np.genfromtxt(path, skip_header=1)
+        for file in files:
+            # Читаем данные из файла
+            data = np.genfromtxt(file, skip_header=1)
             frequencies_list.append(data[:, 0])
             amplitudes_list.append(data[:, 1])
-        bilding(frequencies_list, amplitudes_list)
-    else:
-        messagebox.showwarning("Предупреждение", "Файлы не выбраны.")
+         # Возвращаем данные для использования
+        return jsonify({
+            'frequencies_list': [freq.tolist() for freq in frequencies_list],
+            'amplitudes_list': [ampl.tolist() for ampl in amplitudes_list]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
-    print(perf_counter() - time)
+@app.route('/set_flags', methods=['POST'])
+def set_flags():
+    try:
+        # Получаем флаги из запроса
+        data = request.json
 
+        # Читаем флаги
+        remove_flag = data.get('remove_flag', False)
+        average_flag = data.get('average_flag', False)
+        find_flag = data.get('find_flag', False)
+        normalize_flag = data.get('normalize_flag', False)
+        normalize_snv_flag = data.get('normalize_snv_flag', False)
+        savgol_filter_flag = data.get('savgol_filter_flag', False)
+        selection_flag = data.get('selection_flag', False)
 
-# выбор действия# выбор действия
-def actions1():
-    global remove_flag, frame
-    remove_flag = not remove_flag
+        # Возвращаем подтверждение
+        return jsonify({
+            'message': 'Флаги установлены',
+            'flags': {
+                'remove_flag': remove_flag,
+                'average_flag': average_flag,
+                'find_flag': find_flag,
+                'normalize_flag': normalize_flag,
+                'normalize_snv_flag': normalize_snv_flag,
+                'savgol_filter_flag': savgol_filter_flag,
+                'selection_flag': selection_flag
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
-
-def actions2():
-    global find_flag, frame, average_flag
-    average_flag = not average_flag
-
-
-
-def actions3():
-    global find_flag, frame, average_flag
-    find_flag = not find_flag
-
-
-
-def actions4():
-    global normalize_flag
-    normalize_flag = not normalize_flag
-
-
-def actions5():
-    global normalize_snv_flag
-    normalize_snv_flag = not normalize_snv_flag
-
-def actions6():
-    global savgol_filter_flag
-    savgol_filter_flag = not savgol_filter_flag
-
-# def actions7():
-#     global moving_average_smoothing_flag
-#     moving_average_smoothing_flag = not moving_average_smoothing_flag
-
-def actions9():
-    global selection_flag
-    selection_flag = not selection_flag
-    
-# пропадает надпись на поле ввода
-def on_entry_click(event):
-    entry = event.widget
-    if entry.get() in ["min_freq", "max_freq"]:
-        entry.delete(0, tk.END)
-
-
-# Удаление данных
+@app.route('/clear_data', methods=['POST'])
 def clear_data():
-    global amplitudes_list, frequencies_list, remove_flag, find_flag
-    amplitudes_list = []
-    frequencies_list = []
-    frame.destroy()
-
-# Объявление основных флагов
-normalize_snv_flag = False
-savgol_filter_flag = False
-remove_flag = False
-find_flag = False
-bild_flag = False
-new_flag = False
-average_flag = False
-selection_flag = False
-normalize_flag = False
-moving_average_smoothing_flag = False
+    try:
+        # Здесь можно добавить логику очистки временных данных, если используется хранилище
+        return jsonify({'message': 'Данные очищены'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 # Создание окна
 root = tk.Tk()
