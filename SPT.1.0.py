@@ -1,4 +1,4 @@
-# Подключение библиотек
+# Подключение библиотекb
 import numpy as np
 import os
 import pywt
