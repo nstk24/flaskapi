@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from scipy.sparse.linalg import spsolve
 from scipy.signal import savgol_filter
 from scipy import sparse
-from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 from time import perf_counter
 from flask import Flask, request, jsonify, render_template
