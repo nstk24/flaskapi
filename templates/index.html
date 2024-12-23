@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask Spectrum Analysis</title>
+    <!-- Подключаем Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Анализ спектров</h1>
+
+        <!-- Загрузка файлов -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2>Загрузка файлов</h2>
+            </div>
+            <div class="card-body">
+                <input class="form-control" type="file" id="files" name="files" multiple>
+                <button class="btn btn-primary mt-3" onclick="uploadFiles()">Загрузить файлы</button>
+            </div>
+        </div>
+
+        <!-- Параметры обработки -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2>Параметры обработки</h2>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="min_freq" class="form-label">Минимальная частота:</label>
+                        <input class="form-control" type="number" id="min_freq" placeholder="0">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="max_freq" class="form-label">Максимальная частота:</label>
+                        <input class="form-control" type="number" id="max_freq" placeholder="10000">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="window_length" class="form-label">Окно сглаживания:</label>
+                        <input class="form-control" type="number" id="window_length" placeholder="25">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="polyorder" class="form-label">Степень полинома:</label>
+                        <input class="form-control" type="number" id="polyorder" placeholder="2">
+                    </div>
+                </div>
+
+                <!-- Флаги -->
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="remove_flag">
+                    <label class="form-check-label" for="remove_flag">Удаление базовой линии</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="normalize_flag">
+                    <label class="form-check-label" for="normalize_flag">Нормализация</label>
+                </div>
+
+                <button class="btn btn-success mt-3" onclick="processData()">Обработать данные</button>
+            </div>
+        </div>
+
+        <!-- График -->
+        <div class="card">
+            <div class="card-header">
+                <h2>График</h2>
+            </div>
+            <div class="card-body text-center">
+                <img id="plot" src="" alt="График будет здесь" class="img-fluid">
+            </div>
+        </div>
+    </div>
+
+    <!-- Подключаем Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
