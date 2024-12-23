@@ -1,7 +1,6 @@
 # Подключение библиотек
 import numpy as np
 import os
-import pywt
 import random
 import flask
 import matplotlib.pyplot as plt
