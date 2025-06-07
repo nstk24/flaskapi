@@ -17,6 +17,44 @@ from scipy.signal import find_peaks
 
 # Функции удаления базовой линии
 app = Flask(__name__)
+# -----------------------------
+# Вспомогательные функции валидации
+
+def ensure_keys(data, keys):
+    if data is None:
+        raise ValueError("Отсутствуют данные запроса")
+    for key in keys:
+        if key not in data:
+            raise ValueError(f"Отсутствует параметр {key}")
+
+
+def validate_array(value, name):
+    if not isinstance(value, list) or not all(isinstance(v, (int, float)) for v in value):
+        raise ValueError(f"{name} должен быть списком чисел")
+
+
+def validate_array_list(value, name):
+    if not isinstance(value, list) or not all(
+        isinstance(arr, list) and all(isinstance(v, (int, float)) for v in arr)
+        for arr in value
+    ):
+        raise ValueError(f"{name} должен быть списком списков чисел")
+
+
+def to_float(value, name):
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        raise ValueError(f"{name} должен быть числом")
+
+
+def to_int(value, name):
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        raise ValueError(f"{name} должен быть целым числом")
+
+# -----------------------------
 
 # Функция нахождения базовой линии
 def baseline_als(amplitudes, lam, p, niter=10):
@@ -36,10 +74,12 @@ def process_baseline():
     try:
         # Получение данных из POST-запроса
         data = request.json
+        ensure_keys(data, ['amplitudes'])
+        validate_array(data['amplitudes'], 'amplitudes')
         amplitudes = np.array(data['amplitudes'])  # Входной массив
-        lam = float(data.get('lam', 1000))         # Параметр lam (по умолчанию 1000)
-        p = float(data.get('p', 0.001))           # Параметр p (по умолчанию 0.001)
-        niter = int(data.get('niter', 10))        # Число итераций (по умолчанию 10)
+        lam = to_float(data.get('lam', 1000), 'lam')
+        p = to_float(data.get('p', 0.001), 'p')
+        niter = to_int(data.get('niter', 10), 'niter')
 
         # Обработка данных
         baseline = baseline_als(amplitudes, lam, p, niter)
@@ -53,9 +93,11 @@ def delete_baseline():
     try:
         # Получение данных из POST-запроса
         data = request.json
+        ensure_keys(data, ['amplitudes_list'])
+        validate_array_list(data['amplitudes_list'], 'amplitudes_list')
         amplitudes_list = [np.array(amplitude) for amplitude in data['amplitudes_list']]  # Список амплитуд
-        lam = float(data.get('lam', 1000))  # Значение lam
-        p = float(data.get('p', 0.001))    # Значение p
+        lam = to_float(data.get('lam', 1000), 'lam')
+        p = to_float(data.get('p', 0.001), 'p')
 
         # Применение функции для удаления базовой линии
         amplitudesBL_list = []
@@ -74,6 +116,8 @@ def average_spectrum():
     try:
         # Получение данных из POST-запроса
         data = request.json
+        ensure_keys(data, ['averaged'])
+        validate_array_list(data['averaged'], 'averaged')
         averaged = [np.array(spectrum) for spectrum in data['averaged']]  # Список спектров
 
         # Вычисление средней спектрограммы
@@ -89,10 +133,13 @@ def select_frequency_range():
     try:
         # Получение данных из POST-запроса
         data = request.json
+        ensure_keys(data, ['freq_list', 'ampl_list'])
+        validate_array_list(data['freq_list'], 'freq_list')
+        validate_array_list(data['ampl_list'], 'ampl_list')
         freq_list = [np.array(freq) for freq in data['freq_list']]  # Список частот
         ampl_list = [np.array(ampl) for ampl in data['ampl_list']]  # Список амплитуд
-        min_freq = float(data.get('min_freq', 0))  # Минимальная частота (по умолчанию 0)
-        max_freq = float(data.get('max_freq', 10000))  # Максимальная частота (по умолчанию 10000)
+        min_freq = to_float(data.get('min_freq', 0), 'min_freq')
+        max_freq = to_float(data.get('max_freq', 10000), 'max_freq')
 
         # Обработка данных
         freq_list2 = []
@@ -118,9 +165,11 @@ def smooth_signal():
     try:
         # Получение данных из POST-запроса
         data = request.json
+        ensure_keys(data, ['spectrum_list'])
+        validate_array_list(data['spectrum_list'], 'spectrum_list')
         spectrum_list = [np.array(spectrum) for spectrum in data['spectrum_list']]  # Список спектров
-        window_length = int(data.get('window_length', 25))  # Длина окна (по умолчанию 25)
-        polyorder = int(data.get('polyorder', 2))  # Степень полинома (по умолчанию 2)
+        window_length = to_int(data.get('window_length', 25), 'window_length')
+        polyorder = to_int(data.get('polyorder', 2), 'polyorder')
 
         # Проверка на корректность параметров
         if window_length % 2 == 0 or window_length <= 0:
@@ -144,6 +193,8 @@ def normalize_spectrum_snv():
     try:
         # Получение данных из POST-запроса
         data = request.json
+        ensure_keys(data, ['spectrum_list'])
+        validate_array_list(data['spectrum_list'], 'spectrum_list')
         spectrum_list = [np.array(spectrum) for spectrum in data['spectrum_list']]  # Список спектров
 
         # Применение нормализации
@@ -164,6 +215,8 @@ def normalize_by_max():
     try:
         # Получение данных из POST-запроса
         data = request.json
+        ensure_keys(data, ['spectrum_list'])
+        validate_array_list(data['spectrum_list'], 'spectrum_list')
         spectrum_list = [np.array(spectrum) for spectrum in data['spectrum_list']]  # Список спектров
 
         # Нормализация каждого спектра относительно его максимального значения
@@ -186,14 +239,16 @@ import base64
 @app.route('/plot_graph', methods=['POST'])
 def plot_graph():
     try:
-        # Получение данных из POST-запроса
         data = request.json
-        frequencies_list = [np.array(freq) for freq in data['frequencies_list']]  # Частоты
-        amplitudes_list = [np.array(ampl) for ampl in data['amplitudes_list']]    # Амплитуды
-        find_flag = data.get('find_flag', False)                                 # Флаг поиска пиков
-        peak_params = data.get('peak_params', {})                                # Параметры поиска пиков
-        width = float(peak_params.get('width', 1))                               # Ширина пиков
-        prominence = float(peak_params.get('prominence', 1))                     # Значение выделенности
+        ensure_keys(data, ["frequencies_list", "amplitudes_list"])
+        validate_array_list(data["frequencies_list"], "frequencies_list")
+        validate_array_list(data["amplitudes_list"], "amplitudes_list")
+        frequencies_list = [np.array(freq) for freq in data["frequencies_list"]]
+        amplitudes_list = [np.array(ampl) for ampl in data["amplitudes_list"]]
+        find_flag = bool(data.get("find_flag", False))
+        peak_params = data.get("peak_params", {})
+        width = to_float(peak_params.get("width", 1), "width")
+        prominence = to_float(peak_params.get("prominence", 1), "prominence")
 
         # Создание графика
         fig, ax = plt.subplots(figsize=(11.5, 7.9))
@@ -234,18 +289,21 @@ def process_and_plot():
         data = request.json
         print("Полученные данные:", data)  # Отладочный вывод
 
+        ensure_keys(data, ['frequencies_list', 'amplitudes_list'])
+        validate_array_list(data['frequencies_list'], 'frequencies_list')
+        validate_array_list(data['amplitudes_list'], 'amplitudes_list')
         frequencies_list = [np.array(freq) for freq in data['frequencies_list']]  # Частоты
         amplitudes_list = [np.array(ampl) for ampl in data['amplitudes_list']]    # Амплитуды
         print("Частоты:", frequencies_list)
         print("Амплитуды:", amplitudes_list)
 
         # Флаги обработки
-        selection_flag = data.get('selection_flag', False)
-        savgol_filter_flag = data.get('savgol_filter_flag', False)
-        remove_flag = data.get('remove_flag', False)
-        normalize_snv_flag = data.get('normalize_snv_flag', False)
-        normalize_flag = data.get('normalize_flag', False)
-        average_flag = data.get('average_flag', False)
+        selection_flag = bool(data.get('selection_flag', False))
+        savgol_filter_flag = bool(data.get('savgol_filter_flag', False))
+        remove_flag = bool(data.get('remove_flag', False))
+        normalize_snv_flag = bool(data.get('normalize_snv_flag', False))
+        normalize_flag = bool(data.get('normalize_flag', False))
+        average_flag = bool(data.get('average_flag', False))
 
         # Проверка параметров
         print("Флаги:", {
@@ -398,15 +456,17 @@ def set_flags():
     try:
         # Получаем флаги из запроса
         data = request.json
+        if data is None:
+            return jsonify({'error': 'Данные не переданы'}), 400
 
         # Читаем флаги
-        remove_flag = data.get('remove_flag', False)
-        average_flag = data.get('average_flag', False)
-        find_flag = data.get('find_flag', False)
-        normalize_flag = data.get('normalize_flag', False)
-        normalize_snv_flag = data.get('normalize_snv_flag', False)
-        savgol_filter_flag = data.get('savgol_filter_flag', False)
-        selection_flag = data.get('selection_flag', False)
+        remove_flag = bool(data.get('remove_flag', False))
+        average_flag = bool(data.get('average_flag', False))
+        find_flag = bool(data.get('find_flag', False))
+        normalize_flag = bool(data.get('normalize_flag', False))
+        normalize_snv_flag = bool(data.get('normalize_snv_flag', False))
+        savgol_filter_flag = bool(data.get('savgol_filter_flag', False))
+        selection_flag = bool(data.get('selection_flag', False))
 
         # Возвращаем подтверждение
         return jsonify({
